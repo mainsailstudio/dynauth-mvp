@@ -1,7 +1,5 @@
 /**
-Title:	Password Manager
-Author:	Connor Peters
-Date:	12/29/2018
+Title:	Password  API
 Desc:	Password manager secured with dynamic authentication and honey encryption
 Notes:	THIS IS NOT CONSIDERED A SECURE PASSWORD MANAGER YET. This product is in it's pre-alpha stage and isn't really designed to be used by anyone yet, it's mostly for testing purposes
 */
@@ -10,20 +8,14 @@ Notes:	THIS IS NOT CONSIDERED A SECURE PASSWORD MANAGER YET. This product is in 
 package pwmapi
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/mainsailstudio/dynauth-mvp/pwm/pwmdb"
 	"github.com/rs/cors"
 	respond "gopkg.in/matryer/respond.v1"
 )
@@ -48,13 +40,35 @@ type Password struct {
 */
 
 // Start - start the password manager API and create all the HTTP routes using Mux
-func Start(protocol string) {
-	// InitDB()
-	// Init router
+func Start() {
+	pwmdb.InitDB()
+
 	fmt.Println("Starting New Password Manager API Service")
+	srv := initRouter()
+
+	if _, err := os.Stat("./gitignore/cert.pem"); os.IsNotExist(err) {
+		initTLSKeyAndCertificate()
+	}
+	if _, err := os.Stat("./gitignore/key.pem"); os.IsNotExist(err) {
+		initTLSKeyAndCertificate()
+	}
+
+	log.Fatal(srv.ListenAndServeTLS("./gitignore/cert.pem", "./gitignore/key.pem"))
+}
+
+/**
+=============================================
+	Helper functions
+=============================================
+*/
+
+func initRouter() *http.Server {
 	r := mux.NewRouter()
 
-	// Init the routes
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		w.Write([]byte("This is an example server.\n"))
+	})
 
 	// GET password entry based on the URL
 	// Example call: /password?url=https://twitter.com
@@ -72,19 +86,54 @@ func Start(protocol string) {
 	// Example call: : /password?url=https://twitter.com
 	r.HandleFunc("/password", deletePassword).Methods("DELETE")
 
+	cfg := &tls.Config{
+		MinVersion:               tls.VersionTLS12,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+	}
+
 	// Add the default handler to allow CORS
 	handler := cors.Default().Handler(r)
 
-	// Listen and serve the handler based on the desired protocol
-	// Everything other than specified "http" will be run over TLS
-	switch protocol {
-	case "http":
-		// Serve over normal HTTP, not HTTPS
-		http.ListenAndServe(":8080", handler)
-	default:
-		// Serve over HTTPS (TLS)
-		startSecureAPI(handler)
+	// Configure the TLS server
+	srv := &http.Server{
+		Addr:         ":443",
+		Handler:      handler,
+		TLSConfig:    cfg,
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
 	}
+
+	return srv
+}
+
+// connectPasswordDatabase - Helper function that connects to the correct database
+func connectPasswordDatabase() {
+
+}
+
+// authenticateDatabase - Helper function that uses the dynamic authentication service to authenticate the user and gain access to the database
+func authenticateDatabase() {
+
+}
+
+// encryptPassword - Helper function that encrypts a password
+func encryptPassword() {
+
+}
+
+// encryptPassword - Helper function that honeys(?) a password before encryption
+func honeyPassword() {
+
+}
+
+// decryptPassword - Helper function that decrypts a password
+func decryptPassword() {
 
 }
 
@@ -144,144 +193,5 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 // deletePassword - DELETE request that deletes an entire password type, along with the username and emails associated with the password
 // PROTECTED function, accessibly only when authenticated
 func deletePassword(w http.ResponseWriter, r *http.Request) {
-
-}
-
-/**
-=============================================
-	Helper functions
-=============================================
-*/
-
-// startSecureAPI - determine if TLS is configured and run, otherwise initialize TLS
-func startSecureAPI(handler http.Handler) {
-	if _, err := os.Stat("ca.crt"); os.IsNotExist(err) {
-		initTLS()
-	}
-	if _, err := os.Stat("ca.key"); os.IsNotExist(err) {
-		initTLS()
-	}
-
-	signTLS()
-
-	// Listen and serve the API over TLS (HTTPS)
-	err := http.ListenAndServeTLS(":443", "bob.crt", "bob.key", handler)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
-}
-
-// initTLS - Initialize the certificate and private key components to start the API over TLS
-func initTLS() {
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(1653),
-		Subject: pkix.Name{
-			Organization:  []string{"DYNAUTH_PASSWORD_MANAGER_LOCAL_ENCRYPT"},
-			Country:       []string{"GLOBAL"},
-			Province:      []string{"PROVINCE"},
-			Locality:      []string{"CITY"},
-			StreetAddress: []string{"ADDRESS"},
-			PostalCode:    []string{"POSTAL_CODE"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	pub := &priv.PublicKey
-	cab, err := x509.CreateCertificate(rand.Reader, ca, ca, pub, priv)
-	if err != nil {
-		log.Println("create ca failed", err)
-		return
-	}
-
-	// Public key
-	certOut, err := os.Create("ca.crt")
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: cab})
-	certOut.Close()
-	log.Print("written initial cert.pem\n")
-
-	// Private key
-	keyOut, err := os.OpenFile("ca.key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	keyOut.Close()
-	log.Print("written initial key.pem\n")
-}
-
-func signTLS() {
-
-	// Load CA
-	catls, err := tls.LoadX509KeyPair("ca.crt", "ca.key")
-	if err != nil {
-		panic(err)
-	}
-	ca, err := x509.ParseCertificate(catls.Certificate[0])
-	if err != nil {
-		panic(err)
-	}
-
-	// Prepare certificate
-	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(1658),
-		Subject: pkix.Name{
-			Organization:  []string{"DYNAUTH_PASSWORD_MANAGER_LOCAL_ENCRYPT"},
-			Country:       []string{"GLOBAL"},
-			Province:      []string{"PROVINCE"},
-			Locality:      []string{"CITY"},
-			StreetAddress: []string{"ADDRESS"},
-			PostalCode:    []string{"POSTAL_CODE"},
-		},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(10, 0, 0),
-		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	pub := &priv.PublicKey
-
-	// Sign the certificate
-	cert_b, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
-
-	// Public key
-	certOut, err := os.Create("bob.crt")
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: cert_b})
-	certOut.Close()
-	log.Print("written SIGNED cert.pem\n")
-
-	// Private key
-	keyOut, err := os.OpenFile("bob.key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	keyOut.Close()
-	log.Print("written SIGNED key.pem\n")
-
-}
-
-// connectPasswordDatabase - Helper function that connects to the correct database
-func connectPasswordDatabase() {
-
-}
-
-// authenticateDatabase - Helper function that uses the dynamic authentication service to authenticate the user and gain access to the database
-func authenticateDatabase() {
-
-}
-
-// encryptPassword - Helper function that encrypts a password
-func encryptPassword() {
-
-}
-
-// encryptPassword - Helper function that honeys(?) a password before encryption
-func honeyPassword() {
-
-}
-
-// decryptPassword - Helper function that decrypts a password
-func decryptPassword() {
 
 }

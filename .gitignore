@@ -6,6 +6,7 @@
 *.dylib
 *.cert
 *.key
+*.ini
 gitignore/
 
 # Test binary, built with `go test -c`

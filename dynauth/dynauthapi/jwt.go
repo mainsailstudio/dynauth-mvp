@@ -5,7 +5,7 @@
 	Desc:	Issues a valid JSON Web Token for authentication over the API
 */
 
-package apiHelper
+package dynauthapi
 
 import (
 	"fmt"

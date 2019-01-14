@@ -1,4 +1,4 @@
-package pwmdb
+package dynauthdb
 
 import (
 	"database/sql"

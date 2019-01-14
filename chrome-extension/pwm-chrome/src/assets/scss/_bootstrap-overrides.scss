@@ -1,0 +1,13 @@
+.text-primary {
+  color: $primary !important;
+}
+
+a {
+  color: darken($primary, 15%);
+  text-decoration: underline;
+  &:hover,
+  &:focus,
+  &:active {
+    color: lighten($primary, 15%);
+  }
+}

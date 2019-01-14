@@ -15,7 +15,7 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
-	"github.com/mainsailstudio/dynauth-mvp/pwm/pwmdb"
+	pwmdb "github.com/mainsailstudio/dynauth-mvp/pwm/pwmdb"
 	"github.com/rs/cors"
 	respond "gopkg.in/matryer/respond.v1"
 )
@@ -26,7 +26,15 @@ import (
 =============================================
 */
 
-// Password structure - contains the password and the associated URL and email/username
+// EncryptedPassword structure - contains the encrypted password and the associated locks to decrypt
+type EncryptedPassword struct {
+	URL      string `json:"URL"`
+	Email    string `json:"email"` // this is the field used for username as well since the function is identical
+	Password string `json:"password"`
+	Locks    string `json:"locks"`
+}
+
+// Password structure - contains the decrypted (plaintext) password and the associated URL and email/username
 type Password struct {
 	URL      string `json:"URL"`
 	Email    string `json:"email"` // this is the field used for username as well since the function is identical
@@ -41,26 +49,17 @@ type Password struct {
 
 // Start - start the password manager API and create all the HTTP routes using Mux
 func Start() {
-	pwmdb.InitDB()
-
-	fmt.Println("Starting New Password Manager API Service")
 	srv := initRouter()
 
-	if _, err := os.Stat("./gitignore/cert.pem"); os.IsNotExist(err) {
+	if _, err := os.Stat("pwm/gitignore/cert.pem"); os.IsNotExist(err) {
 		initTLSKeyAndCertificate()
 	}
-	if _, err := os.Stat("./gitignore/key.pem"); os.IsNotExist(err) {
+	if _, err := os.Stat("pwm/gitignore/key.pem"); os.IsNotExist(err) {
 		initTLSKeyAndCertificate()
 	}
 
-	log.Fatal(srv.ListenAndServeTLS("./gitignore/cert.pem", "./gitignore/key.pem"))
+	log.Fatal(srv.ListenAndServeTLS("pwm/gitignore/cert.pem", "pwm/gitignore/key.pem"))
 }
-
-/**
-=============================================
-	Helper functions
-=============================================
-*/
 
 func initRouter() *http.Server {
 	r := mux.NewRouter()
@@ -85,6 +84,14 @@ func initRouter() *http.Server {
 	// DELETE password to delete existing entry. Queries based on URL
 	// Example call: : /password?url=https://twitter.com
 	r.HandleFunc("/password", deletePassword).Methods("DELETE")
+
+	// GET locks based on based on the URL
+	// Example call: /lock?url=https://twitter.com
+	r.HandleFunc("/locks", getLocks).Queries("url", "{url}").Methods("GET")
+
+	// POST new temp lock entry for encryption password based on url and email
+	// Example call: /locks?url=https://twitter.com&email=test@test.com
+	// r.HandleFunc("/locks", storeTempLocks).Queries("url", "{url}", "email", "{email}").Methods("POST")
 
 	cfg := &tls.Config{
 		MinVersion:               tls.VersionTLS12,
@@ -112,31 +119,6 @@ func initRouter() *http.Server {
 	return srv
 }
 
-// connectPasswordDatabase - Helper function that connects to the correct database
-func connectPasswordDatabase() {
-
-}
-
-// authenticateDatabase - Helper function that uses the dynamic authentication service to authenticate the user and gain access to the database
-func authenticateDatabase() {
-
-}
-
-// encryptPassword - Helper function that encrypts a password
-func encryptPassword() {
-
-}
-
-// encryptPassword - Helper function that honeys(?) a password before encryption
-func honeyPassword() {
-
-}
-
-// decryptPassword - Helper function that decrypts a password
-func decryptPassword() {
-
-}
-
 /**
 =============================================
 	API functions
@@ -146,6 +128,33 @@ func decryptPassword() {
 // createPassword - POST request that adds a password to the password database along with an email/username and URL associated with the password
 // PROTECTED function, accessibly only when authenticated
 func createPassword(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	url := vars["url"]
+	if len(url) == 0 { // URL is empty
+		fmt.Println("Url Param 'url' is missing")
+		respond.With(w, r, http.StatusBadGateway, "Url not understood")
+		return
+	}
+
+	email := vars["email"]
+	if len(url) == 0 { // Email is empty
+		fmt.Println("Url Param 'email' is missing")
+		respond.With(w, r, http.StatusBadGateway, "Email not understood")
+		return
+	}
+
+	password := vars["password"]
+	if len(url) == 0 { // Password is empty
+		fmt.Println("Url Param 'password' is missing")
+		respond.With(w, r, http.StatusBadGateway, "Password not understood")
+		return
+	}
+
+	err := encryptAndStorePassword(url, email, password)
+	if err != nil {
+		respond.With(w, r, http.StatusInternalServerError, err)
+		return
+	}
 
 }
 
@@ -155,33 +164,27 @@ func getPassword(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	url := vars["url"]
 	if len(url) == 0 { // URL is empty
-		fmt.Println("Url Param 'email' is missing")
-		http.Error(w, "Parameter URL was empty in GET request", http.StatusBadRequest)
+		fmt.Println("Url Param 'url' is missing")
+		respond.With(w, r, http.StatusBadGateway, "Url not understood")
 		return
 	}
 
-	fmt.Println("Url Param 'url' is: " + url)
+	encryptedPass, err := getEncryptedPassword(url)
+	if err != nil {
+		fmt.Println("Password for url " + url + " doesn't exist")
+		respond.With(w, r, http.StatusNotFound, err)
+		return
+	}
 
-	// database, err := sql.Open("sqlite3", "./private/database.db")
-	// if err != nil {
-	// 	fmt.Println("\n There was an issue readying the database \n")
-	// 	log.Fatal(err)
-	// }
-
-	// row, err := database.Query("SELECT password FROM passwords WHERE email = ?", email)
-
-	// var password string
-	// if err := database.QueryRow("SELECT password FROM passwords WHERE email = ?", email).Scan(&password); err != nil {
-	// 	fmt.Println("error oops")
-	// 	log.Fatal(err)
-	// }
-
-	// fmt.Println("Password for url " + url + " is " + password)
-
-	passwordData := Password{URL: url, Email: "example@example.com", Password: "testPassword"}
+	decryptedPass, err := decryptPassword(encryptedPass)
+	if err != nil {
+		fmt.Println("Can't decrypt url:  " + url)
+		respond.With(w, r, http.StatusNotFound, err)
+		return
+	}
 
 	// respond with OK, and the data
-	respond.With(w, r, http.StatusOK, passwordData)
+	respond.With(w, r, http.StatusOK, decryptedPass)
 }
 
 // updatePassword - PUT request that updates a password type, including ability to update email/username and URL associated with the password
@@ -194,4 +197,75 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 // PROTECTED function, accessibly only when authenticated
 func deletePassword(w http.ResponseWriter, r *http.Request) {
 
+}
+
+// getLocks - GET request to get random locks to serve to the user
+func getLocks(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// storeTempLocks - POST request
+// PROTECTED function, accessibly only when authenticated
+// func storeTempLocks(w http.ResponseWriter, r *http.Request) {
+
+// }
+
+/**
+=============================================
+	Helper functions
+=============================================
+*/
+
+// encryptAndStorePassword
+func encryptAndStorePassword(url string, email string, password string) (err error) {
+	preppedStatement, err := pwmdb.DB.Prepare("INSERT INTO passwords (url, email, password) values (?, ?, ?)")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = preppedStatement.Exec(url, email, password)
+	if err != nil {
+		log.Panic(err)
+		return err
+	}
+
+	return nil
+}
+
+func getEncryptedPassword(url string) (encryptedPassword EncryptedPassword, err error) {
+	var email string
+	var password string
+	var locks string
+	err = pwmdb.DB.QueryRow("SELECT email, password, locks FROM passwords WHERE url = ?", url).Scan(&email, &password, &locks)
+	if err != nil {
+		log.Panic(err)
+		return EncryptedPassword{}, err
+	}
+
+	return EncryptedPassword{URL: url, Email: email, Password: password, Locks: locks}, nil
+}
+
+// connectPasswordDatabase - Helper function that connects to the correct database
+func connectPasswordDatabase() {
+
+}
+
+// authenticateDatabase - Helper function that uses the dynamic authentication service to authenticate the user and gain access to the database
+func authenticateDatabase() {
+
+}
+
+// encryptPassword - Helper function that encrypts a password
+func encryptPassword(password string) {
+
+}
+
+// encryptPassword - Helper function that honeys(?) a password before encryption
+func honeyPassword() {
+
+}
+
+// decryptPassword - Helper function that decrypts a password
+func decryptPassword(encryptedPassword EncryptedPassword) (decryptedPassword Password, err error) {
+	return Password{URL: encryptedPassword.URL, Email: encryptedPassword.Email, Password: encryptedPassword.Password}, nil
 }

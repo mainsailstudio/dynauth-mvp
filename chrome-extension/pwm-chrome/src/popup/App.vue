@@ -1,5 +1,8 @@
 <template>
-  <div>
+  <div class="container" style="min-width:480px">
+    <router-link to="/">Home</router-link>
+    <router-link to="/about">About</router-link>
+    <router-link to="/dynauth">Authenticate</router-link>
     <router-view></router-view>
   </div>
 </template>
@@ -11,3 +14,6 @@ export default {
   }
 }
 </script>
+<style>
+  @import '../assets/css/resume.css';
+</style>

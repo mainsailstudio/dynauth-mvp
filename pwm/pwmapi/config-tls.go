@@ -1,9 +1,6 @@
 // Copyright 2009 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
-// +build ignore
-
 // Generate a self-signed X.509 certificate for a TLS server. Outputs to
 // 'cert.pem' and 'key.pem' and will overwrite existing files.
 
@@ -21,7 +18,9 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -121,14 +120,14 @@ func initTLSKeyAndCertificate() {
 		BasicConstraintsValid: true,
 	}
 
-	// hosts := strings.Split(*host, ",")
-	// for _, h := range hosts {
-	// 	if ip := net.ParseIP(h); ip != nil {
-	// 		template.IPAddresses = append(template.IPAddresses, ip)
-	// 	} else {
-	// 		template.DNSNames = append(template.DNSNames, h)
-	// 	}
-	// }
+	hosts := strings.Split(*host, ",")
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
 
 	if *isCA {
 		template.IsCA = true

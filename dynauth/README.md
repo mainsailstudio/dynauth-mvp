@@ -1,4 +1,8 @@
-# Dyanuth: Dynamic Authentication
+# Please don't use this yet
+### It's so not secure
+And it probably won't work for you anyway! Check back in a week, maybe this notice will be gone and there will be install instructions instead... who knows? :)
+
+# Dynauth: Dynamic Authentication
 
 #### Created by Connor Peters, looking for collaboration. Please contact me via: https://dynauth.io/contact
 
